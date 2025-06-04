@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DETECTION SYSTEM // SEQUENCE 02</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="main-container">
+        <div class="visualization-container">
+            <div class="visualization-header">社会决策模拟器 SOCIAL DECISION SIMULATOR</div>
+            <div class="visualization-grid corner-brackets top-left corner-brackets top-right corner-brackets bottom-left corner-brackets bottom-right">
+                <canvas id="visualCanvas"></canvas>
+                <div class="scan-line"></div>
+            </div>
+        </div>
+        
+        <div id="dataPanel" class="data-panel">
+            <!-- 内容将由JavaScript动态生成 -->
+        </div>
+    </div>
+    
+    <div class="status-bar">
+        <div class="status-indicator active">SYSTEM ACTIVE</div>
+        <div class="status-indicator">TRACKING: ON</div>
+        <div class="status-indicator">FRAME RATE: 10 FPS</div>
+    </div>
+
+    <script type="module" src="visualization.js"></script>
+    
+    <!-- 只添加视频流增强功能 -->
+    <script>
+        // 等待页面和模块加载完成后初始化视频流
+        document.addEventListener('DOMContentLoaded', () => {
+            // 延迟初始化，确保visualization.js和其他模块先完成加载
+            setTimeout(() => {
+                initializeVideoStream();
+            }, 2000);
+        });
+
+        // 初始化YOLO视频流功能
+        function initializeVideoStream() {
+            const videoElement = document.getElementById('sequence-video');
+            if (!videoElement) {
+                console.log('视频元素未找到，稍后重试...');
+                setTimeout(initializeVideoStream, 2000);
+                return;
+            }
+
+            console.log('设置YOLO实时视频流...');
+            
+            // 创建YOLO视频流img元素
+            const streamImg = document.createElement('img');
+            streamImg.id = 'yolo-stream';
+            streamImg.src = 'http://localhost:5000/video_feed';
+            streamImg.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+                z-index: 10;
+                display: none;
+            `;
+
+            // 添加到视频容器
+            const videoContainer = videoElement.parentElement;
+            videoContainer.appendChild(streamImg);
+
+            // 创建状态指示器
+            const statusDiv = document.createElement('div');
+            statusDiv.style.cssText = `
+                position: absolute;
+                top: 5px;
+                right: 5px;
+                background: rgba(0, 0, 0, 0.8);
+                color: #00ff41;
+                padding: 5px 10px;
+                font-size: 12px;
+                font-family: 'Courier New', monospace;
+                border-radius: 3px;
+                z-index: 20;
+                border: 1px solid #00ff41;
+            `;
+            statusDiv.textContent = '连接中...';
+            videoContainer.appendChild(statusDiv);
+
+            // 视频流加载成功
+            streamImg.onload = () => {
+                streamImg.style.display = 'block';
+                videoElement.style.display = 'none'; // 隐藏原有视频
+                statusDiv.textContent = 'YOLO LIVE';
+                statusDiv.style.color = '#00ff41';
+                console.log('✅ YOLO视频流连接成功');
+            };
+
+            // 视频流加载失败
+            streamImg.onerror = () => {
+                streamImg.style.display = 'none';
+                videoElement.style.display = 'block'; // 显示原有视频
+                statusDiv.textContent = '连接失败';
+                statusDiv.style.color = '#ff4444';
+                statusDiv.style.borderColor = '#ff4444';
+                console.log('❌ YOLO视频流连接失败，显示原有视频');
+            };
+
+            // 定期重试连接
+            setInterval(() => {
+                if (streamImg.style.display === 'none') {
+                    console.log('重试YOLO视频流连接...');
+                    streamImg.src = 'http://localhost:5000/video_feed?t=' + Date.now();
+                }
+            }, 5000);
+
+            console.log('视频流增强功能已初始化');
+        }
+    </script>
+</body>
+</html>

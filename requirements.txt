@@ -1,0 +1,7 @@
+ultralytics
+toio.py
+opencv-python
+numpy
+asyncio
+flask
+flask-cors 
