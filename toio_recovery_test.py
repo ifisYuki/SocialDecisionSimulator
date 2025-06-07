@@ -36,10 +36,14 @@ CIRCLE_COLOR = (0, 0, 0)
 CIRCLE_THICKNESS = 1
 
 # ========== 归正功能配置参数 ==========
-STUCK_DISTANCE_THRESHOLD = 15  # 位置变化阈值（像素）
+STUCK_DISTANCE_THRESHOLD = 5  # 位置变化阈值（像素）
 STUCK_TIME_THRESHOLD = 6.0     # 卡住时间阈值（秒）
-RECOVERY_COOLDOWN_TIME = 15.0  # 归正冷却时间（秒）
+RECOVERY_COOLDOWN_TIME = 5.0  # 归正冷却时间（秒）
 DETECTION_LOST_THRESHOLD = 3.0 # 检测丢失触发归正的时间（秒）
+RECOVERY_TURN_COUNT_MIN = 2    # 归正时随机旋转最少次数
+RECOVERY_TURN_COUNT_MAX = 5    # 归正时随机旋转最多次数
+RECOVERY_TURN_ANGLE_MIN = 30   # 归正时随机旋转最小角度（度）
+RECOVERY_TURN_ANGLE_MAX = 90   # 归正时随机旋转最大角度（度）
 
 # ========== 全局变量 ==========
 model = None
@@ -156,10 +160,33 @@ class ToioController:
             await self.cube.api.motor.motor_control(left=0, right=0)
             await asyncio.sleep(0.3)
             
-            # 第四步：原地转180度
-            print(f"🔄 Toio {self.id}: 步骤4 - 原地转180度")
-            await self.cube.api.motor.motor_control(left=35, right=-35)
-            await asyncio.sleep(1.3)
+            # 第四步：随机往复多次左右旋转随机角度
+            print(f"🔄 Toio {self.id}: 步骤4 - 随机往复旋转（{RECOVERY_TURN_ANGLE_MIN}-{RECOVERY_TURN_ANGLE_MAX}度）")
+            turn_count = random.randint(RECOVERY_TURN_COUNT_MIN, RECOVERY_TURN_COUNT_MAX)  # 随机旋转次数
+            print(f"   🎲 随机选择旋转次数: {turn_count}次")
+            
+            for i in range(turn_count):
+                # 随机选择角度
+                angle = random.randint(RECOVERY_TURN_ANGLE_MIN, RECOVERY_TURN_ANGLE_MAX)
+                # 计算旋转时间：180度需要1.3秒，按比例计算
+                turn_time = (angle / 180.0) * 1.3
+                
+                # 随机选择左转或右转
+                if random.random() < 0.5:
+                    # 左转
+                    print(f"   ↺ 第{i+1}次：左转{angle}度（{turn_time:.2f}秒）")
+                    await self.cube.api.motor.motor_control(left=-25, right=25)
+                else:
+                    # 右转  
+                    print(f"   ↻ 第{i+1}次：右转{angle}度（{turn_time:.2f}秒）")
+                    await self.cube.api.motor.motor_control(left=25, right=-25)
+                
+                # 按角度计算的旋转时间
+                await asyncio.sleep(turn_time)
+                
+                # 短暂停顿
+                await self.cube.api.motor.motor_control(left=0, right=0)
+                await asyncio.sleep(0.1)
             
             # 第五步：停顿稳定
             await self.cube.api.motor.motor_control(left=0, right=0)

@@ -117,28 +117,92 @@ class ToioController:
                 print(f"⚠️  Toio {self.id}: 特殊动作失败 - {e}")
         
     async def handle_detection_lost(self):
-        """处理检测丢失的情况"""
+        """处理检测丢失的情况：先进入 lost，5 秒后进入 search"""
         current_time = time.time()
-        if not self.is_detected and current_time - self.last_detected_time > 0.4:  # 0.2秒未检测到
-            if self.state != "lost":
-                print(f"⚠️  Toio {self.id}: 检测丢失")
+
+        if not self.is_detected:
+            time_lost = current_time - self.last_detected_time
+
+            # 第一步：短暂丢失，进入 lost 状态并停止
+            if self.state == "random" and time_lost > 0.4:
+                print(f"⚠️  Toio {self.id}: 检测丢失，进入 lost 状态")
                 self.state = "lost"
-                # 停止移动
                 try:
                     await self.cube.api.motor.motor_control(left=0, right=0)
                 except:
                     pass
+
+            # 第二步：持续丢失超过 5 秒，进入搜索状态
+            elif self.state == "lost" and time_lost > 5.0:
+                print(f"🕵️ Toio {self.id}: 检测丢失超过 5 秒，进入 search 状态")
+                self.state = "search"
+                self.state_event.set()
                 
     def update_detection_status(self, detected: bool):
-        """更新检测状态"""
+        """更新视觉检测状态，控制状态恢复与打断搜索等行为"""
         if detected:
             self.last_detected_time = time.time()
             self.is_detected = True
-            if self.state == "lost":
+
+            if self.state in ["lost", "search"]:
+                print(f"✅ Toio {self.id}: 检测恢复，退出 {self.state} 状态")
                 self.state = "random"
-                print(f"✅ Toio {self.id}: 恢复检测")
+                self.state_event.set()  # 通知 control_loop 有状态变更
         else:
             self.is_detected = False
+
+    async def search_move(self):
+        """执行搜索动作以重新进入识别区域"""
+        try:
+            print(f"🔍 Toio {self.id}: 开始搜索动作（尝试被重新识别）")
+
+            # 向前运动
+            await self.cube.api.motor.motor_control(left=30, right=30)
+            for _ in range(10):  # 每 0.1s 检查一次识别状态
+                if self.is_detected:
+                    print(f"✅ Toio {self.id}: 搜索中被重新识别，停止动作")
+                    return
+                await asyncio.sleep(0.1)
+
+            # 向后运动（速度减半）
+            await self.cube.api.motor.motor_control(left=-15, right=-15)
+            for _ in range(30):
+                if self.is_detected:
+                    print(f"✅ Toio {self.id}: 搜索中被重新识别，停止动作")
+                    return
+                await asyncio.sleep(0.1)
+
+            # 左转90度
+            await self.cube.api.motor.motor_control(left=-25, right=25)
+            await asyncio.sleep(0.4)
+            if self.is_detected:
+                return
+
+            # 向前
+            await self.cube.api.motor.motor_control(left=30, right=30)
+            for _ in range(10):
+                if self.is_detected:
+                    return
+                await asyncio.sleep(0.1)
+
+            # 左转180度
+            await self.cube.api.motor.motor_control(left=-25, right=25)
+            await asyncio.sleep(0.8)
+            if self.is_detected:
+                return
+
+            # 向前
+            await self.cube.api.motor.motor_control(left=30, right=30)
+            for _ in range(10):
+                if self.is_detected:
+                    return
+                await asyncio.sleep(0.1)
+
+        except Exception as e:
+            print(f"⚠️ Toio {self.id}: 搜索动作异常 - {e}")
+        finally:
+            self.state = "random"
+            print(f"↩️ Toio {self.id}: 搜索动作结束，恢复随机状态")
             
     async def control_loop(self):
         """主控制循环"""
@@ -163,6 +227,8 @@ class ToioController:
                             
                     elif self.state == "special" and self.is_detected:
                         await self.special_move()
+                    elif self.state == "search" and not self.is_detected:
+                        await self.search_move()
                     else:
                         await asyncio.sleep(0.1)  # 未检测到时的等待时间
                         
@@ -709,4 +775,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n✅ 程序正常退出")
     except Exception as e:
-        print(f"\n❌ 程序异常: {e}") 
+        print(f"\n❌ 程序异常: {e}")
